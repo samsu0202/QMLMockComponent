@@ -1,0 +1,2 @@
+singleton DeclareType DeclareType.qml
+singleton ExpectedResult ExpectedResult.qml
