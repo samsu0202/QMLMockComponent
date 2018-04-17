@@ -29,6 +29,11 @@ Item {
         id: injection
 
         function checkCall() {
+            if (!core.startDetect)
+            {
+                return;
+            }
+
             var name = arguments[0];
             var parameters = core.arguments2Array(arguments, 2);
             var checkResult = false;
@@ -58,6 +63,7 @@ Item {
 
     QtObject {
         id: core
+        property bool startDetect: false
         property list<BaseDeclaration> declarationList
         property string template: '
             import QtQuick 2.0;
@@ -93,6 +99,15 @@ Item {
                 core.mockObject[propertyInitFunc](declaration.initialValue);
             }
         }
+
+        function createMockObject() {
+            var codeSnippet = "";
+            for (var i = 0; i < declarationList.length; i++) {
+                codeSnippet += declarationList[i].createSnippet() + "\n";
+            }
+            core.mockObject = Qt.createQmlObject(core.template.arg(codeSnippet), root);
+            core.initProperties();
+        }
     }
 
     function instance() {
@@ -100,6 +115,7 @@ Item {
     }
 
     function expectCall(name) {
+        core.startDetect = true;
         // can not extract to core or sub-function, otherwise file and line information will be incorrect
         var callerInfo = {
             file: testUtil.callerFile(),
@@ -145,5 +161,6 @@ Item {
         core.expectedObjects = [];
         core.uninterestingObjects = [];
         core.initProperties();
+        core.startDetect = false;
     }
 }
