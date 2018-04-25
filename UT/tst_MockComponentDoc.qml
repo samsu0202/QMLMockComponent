@@ -7,6 +7,21 @@ Item {
     width: 100
     height: 100
 
+    Timer {
+        id: delayAction
+
+        property var func: null
+        onTriggered: {
+            func();
+        }
+
+        function execute(func, timeout) {
+            interval = timeout;
+            delayAction.func = func;
+            start();
+        }
+    }
+
     TestCase {
         when: windowShown
         name: "How does MockComponent work"
@@ -20,7 +35,9 @@ Item {
         // 2. times(int)
         // 3. return(variant) (這功能是我為什麼要做這個mock的主要動機)
         // 4. action(functor)
-        // 5. uninteresting call warning detection
+        // 5. timeout(milliseconds)
+        // 6. try expected call(name, parameters...)
+        // 7. uninteresting call warning detection
         //
         // ps. property目前沒想到要怎麼用, 所以只有幫忙在mock instance產生property而已,
         //     所有檢查功能都沒有作用, 之後有想到要怎麼套用在mock上再設計吧
@@ -192,6 +209,35 @@ Item {
             mockObj.signal1();
             mockObj.signal1();
             compare(doFunctorCount, 2);
+        }
+
+        // *************************************************************************
+        // 利用timeout給定timeout的時間 (milliseconds)
+        // *************************************************************************
+        function test_timeout() {
+            mockComp.expectCall("signal1").timeout(5000);
+
+            // 模擬mock object signal跟function的呼叫
+            delayAction.execute(function(){
+                mockObj.signal1();
+            }, 100);
+        }
+
+        // *************************************************************************
+        // tryExpectCall(name, parameters...)
+        // 針對signal, function搭配參數做5000 milliseconds內預期呼叫的偵測, 預設是一次
+        // parameters的部分是用物件比較, 所以針對JavaScript的物件基本上都可比較, 例如Date
+        // 等同於expectCall(name, parameters...).timeout(5000)
+        // *************************************************************************
+        function test_tryExpectCall() {
+            mockComp.tryExpectCall("signal1");
+            // 等同於
+            // mockComp.expectCall("signal1").timeout(5000);
+
+            // 模擬mock object signal跟function的呼叫
+            delayAction.execute(function(){
+                mockObj.signal1();
+            }, 100);
         }
 
         // *************************************************************************

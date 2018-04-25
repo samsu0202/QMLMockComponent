@@ -129,15 +129,32 @@ Item {
         return expectedObj;
     }
 
+    function tryExpectCall(name) {
+        var defTimeout = 5000;
+        core.startDetect = true;
+        // can not extract to core or sub-function, otherwise file and line information will be incorrect
+        var callerInfo = {
+            file: testUtil.callerFile(),
+            line: testUtil.callerLine()
+        };
+        // can not extract to core or sub-function, otherwise arguments will be incorrect
+        var parameters = core.arguments2Array(arguments, 1);
+        var expectedObj = new ExpectedObject.ExpectedObject(name, parameters, callerInfo, root._);
+        expectedObj.timeout(defTimeout);
+        core.expectedObjects.push(expectedObj);
+
+        return expectedObj;
+    }
+
     function verify(expectedResult) {
         var expectedResultTmp = typeof expectedResult === "undefined" ? ExpectedResult.success : expectedResult;
         core.expectedObjects.forEach(function(obj){
             var valid = false;
             if (expectedResultTmp === ExpectedResult.success) {
-                valid = obj.success();
+                valid = obj.success(testResults);
             }
             else {
-                valid = obj.fail();
+                valid = obj.fail(testResults);
             }
 
             if (!valid)

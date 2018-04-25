@@ -12,6 +12,7 @@ function ExpectedObject(name, parameters, callerInfo, dontCareParaDef) {
     var _returnList = [];
     var _invokeList = [];
     var _dontCareParaDef = dontCareParaDef;
+    var _timeout = 0;
 
     // ================ internal public ================
     this.getCallerInfo = function() {
@@ -45,7 +46,7 @@ function ExpectedObject(name, parameters, callerInfo, dontCareParaDef) {
         return true;
     }
 
-    this.success = function() {
+    this.success = function(testResults) {
         if (_expectedTimes < 0) {
             // don't care times
             return true;
@@ -53,6 +54,12 @@ function ExpectedObject(name, parameters, callerInfo, dontCareParaDef) {
 
         var expectedTimes = Math.max(_expectedTimes, _returnList.length, _invokeList.length);
         var success = expectedTimes === _actualTimes;
+        var i = 0;
+        while (i < _timeout && !success) {
+            testResults.wait(50);
+            i += 50;
+            success = expectedTimes === _actualTimes;
+        }
         if (!success) {
             _errorMessage = "Compared values are not the same\n   Actual   (): %1\n   Expected (): %2".arg(_actualTimes).arg(expectedTimes);
         }
@@ -60,9 +67,14 @@ function ExpectedObject(name, parameters, callerInfo, dontCareParaDef) {
         return success;
     }
 
-    this.fail = function() {
+    this.fail = function(testResults) {
         var expectedTimes = Math.max(_expectedTimes, _returnList.length, _invokeList.length);
         var fail = expectedTimes !== _actualTimes;
+        while (i < _timeout && !fail) {
+            testResults.wait(50);
+            i += 50;
+            fail = expectedTimes !== _actualTimes;
+        }
         if (!fail) {
             _errorMessage = "Compared values are the same\n   Actual   (): %1\n   Expected (): %2".arg(_actualTimes).arg(expectedTimes);
         }
@@ -99,5 +111,9 @@ function ExpectedObject(name, parameters, callerInfo, dontCareParaDef) {
     this.action = function(func) {
         _invokeList.push(func);
         return this;
+    }
+
+    this.timeout = function(timeout) {
+        _timeout = timeout;
     }
 }
