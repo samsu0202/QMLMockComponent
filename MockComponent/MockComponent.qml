@@ -9,6 +9,7 @@ Item {
     id: root
 
     default property alias declarationList: core.declarationList
+    property bool ignoreCallFromTest: true
     property bool strict: false // if true, test case will failure when warning occur
     readonly property string _: "__dont_care__"
 
@@ -19,6 +20,7 @@ Item {
         }
         core.mockObject = Qt.createQmlObject(core.template.arg(codeSnippet), root);
         core.initProperties();
+        core.connectTestCaseXSignals();
     }
 
     TestUtil { id: testUtil }
@@ -31,7 +33,12 @@ Item {
         function checkCall() {
             if (!core.startDetect)
             {
-                return;
+                return core.getTestCaseFinalExpectedReturnValue(arguments[0]);
+            }
+
+            var targetCallerInfo = arguments[1];
+            if (ignoreCallFromTest && targetCallerInfo.file.indexOf("tst_") >= 0) {
+                return undefined;
             }
 
             var name = arguments[0];
@@ -53,7 +60,6 @@ Item {
 
             if (!checkResult) {
                 // this call is not interest call
-                var targetCallerInfo = arguments[1];
                 core.uninterestingObjects.push(new UninterestingObject.UninterestingObject(name, parameters, targetCallerInfo));
             }
 
@@ -108,6 +114,89 @@ Item {
             core.mockObject = Qt.createQmlObject(core.template.arg(codeSnippet), root);
             core.initProperties();
         }
+
+        function findRoot(object) {
+            if (object.parent) {
+                return findRoot(object.parent);
+            }
+
+            return object;
+        }
+
+        function findTestCaseObj(object, result) {
+            if (object.objectName.indexOf("__TEST_CASEX__") === 0) {
+                result.push(object);
+            }
+
+            for (var i = 0; i < object.children.length; i++) {
+                findTestCaseObj(object.children[i], result);
+            }
+        }
+
+        function connectTestCaseXSignals() {
+            var testCaseObjs = [];
+            findTestCaseObj(findRoot(root), testCaseObjs);
+            if (testCaseObjs.length === 0) {
+                testResults.fail("Can not find TestCaseX, MockComponent must to be used with TestCaseX.qml which in MockComponent folder", testUtil.callerFile(), testUtil.callerLine());
+                return;
+            }
+
+            for (var i = 0; i < testCaseObjs.length; i++) {
+                if (typeof testCaseObjs[i].beginTestCase !== "undefined") {
+                    testCaseObjs[i].beginTestCase.connect(function(){
+                        core.startDetect = true;
+                    });
+                }
+                if (typeof testCaseObjs[i].endTestCase !== "undefined") {
+                    testCaseObjs[i].endTestCase.connect(function(){
+                        core.verify();
+                    });
+                }
+            }
+        }
+
+        function getTestCaseFinalExpectedReturnValue(objectName)
+        {
+            var foundObj = Qt._.find(core.expectedObjects, function(obj){
+                return obj.getName() === objectName;
+            });
+
+            if (foundObj)
+            {
+                return foundObj.getReturnValue();
+            }
+
+            return;
+        }
+
+        function verify() {
+            if (!testResults.failed) {
+                // if test case already failed, we ignore the checking or it will show too much error message
+                core.expectedObjects.forEach(function(obj){
+                    if (!obj.success(testResults))
+                    {
+                        var callerInfo = obj.getCallerInfo();
+                        testResults.fail(obj.errorMessage(), callerInfo.file, callerInfo.line);
+                    }
+                });
+
+                core.uninterestingObjects.forEach(function(obj){
+                    var callerInfo = obj.getCallerInfo();
+                    if (strict) {
+                        testResults.fail(obj.errorMessage(), callerInfo.file, callerInfo.line);
+                    }
+                    else {
+                        testResults.warn(obj.errorMessage(), callerInfo.file, callerInfo.line);
+                    }
+                });
+            }
+
+            // clean all
+            core.startDetect = false;
+            core.expectedObjects.length = 0;
+            core.uninterestingObjects.length = 0;
+            core.initProperties();
+        }
     }
 
     function instance() {
@@ -115,7 +204,6 @@ Item {
     }
 
     function expectCall(name) {
-        core.startDetect = true;
         // can not extract to core or sub-function, otherwise file and line information will be incorrect
         var callerInfo = {
             file: testUtil.callerFile(),
@@ -131,7 +219,6 @@ Item {
 
     function tryExpectCall(name) {
         var defTimeout = 5000;
-        core.startDetect = true;
         // can not extract to core or sub-function, otherwise file and line information will be incorrect
         var callerInfo = {
             file: testUtil.callerFile(),
@@ -144,40 +231,5 @@ Item {
         core.expectedObjects.push(expectedObj);
 
         return expectedObj;
-    }
-
-    function verify(expectedResult) {
-        var expectedResultTmp = typeof expectedResult === "undefined" ? ExpectedResult.success : expectedResult;
-        core.expectedObjects.forEach(function(obj){
-            var valid = false;
-            if (expectedResultTmp === ExpectedResult.success) {
-                valid = obj.success(testResults);
-            }
-            else {
-                valid = obj.fail(testResults);
-            }
-
-            if (!valid)
-            {
-                var callerInfo = obj.getCallerInfo();
-                testResults.fail(obj.errorMessage(), callerInfo.file, callerInfo.line);
-            }
-        });
-
-        core.uninterestingObjects.forEach(function(obj){
-            var callerInfo = obj.getCallerInfo();
-            if (strict) {
-                testResults.fail(obj.errorMessage(), callerInfo.file, callerInfo.line);
-            }
-            else {
-                testResults.warn(obj.errorMessage(), callerInfo.file, callerInfo.line);
-            }
-        });
-
-        // clean all
-        core.expectedObjects = [];
-        core.uninterestingObjects = [];
-        core.initProperties();
-        core.startDetect = false;
     }
 }

@@ -1,6 +1,5 @@
 import QtQuick 2.7
 import QtTest 1.1
-import ".."
 import "../MockComponent"
 
 Item {
@@ -22,7 +21,8 @@ Item {
         }
     }
 
-    TestCase {
+    // MockComponent必須搭配TestCaseX使用
+    TestCaseX {
         when: windowShown
         name: "How does MockComponent work"
 
@@ -38,12 +38,15 @@ Item {
         // 5. timeout(milliseconds)
         // 6. try expected call(name, parameters...)
         // 7. uninteresting call warning detection
+        // 8. ignoreCallFromTest property
         //
         // ps. property目前沒想到要怎麼用, 所以只有幫忙在mock instance產生property而已,
         //     所有檢查功能都沒有作用, 之後有想到要怎麼套用在mock上再設計吧
         // *************************************************************************
         MockComponent {
             id: mockComp
+
+            ignoreCallFromTest: false
 
             // 沒有參數的signal
             Signal { name: "signal1" }
@@ -57,11 +60,13 @@ Item {
 
             // variant type的property, 初始值是"this is initial value"
             Property { name: "pro1"; initialValue: "this is initial value" }
+            // 新增已經存在的property ok
+            Property { name: "visible"; initialValue: false }
         }
 
         function cleanup() {
-            // 最後要呼叫verify, 除了reset mock object的功能外, 還會執行檢查的動作
-            mockComp.verify();
+            // 這裡不需要再呼叫verify,
+            // 而是MockComponent會自行判斷甚麼時候要呼叫verify, 因此必須搭配TestCaseX使用
         }
 
         // *************************************************************************
@@ -171,16 +176,22 @@ Item {
         // *************************************************************************
         function test_action() {
             // signal2被呼叫到時會順便執行action帶入的functor
+            var expectArgs = [];
             var result = false;
             mockComp.expectCall("signal2", mockComp._, mockComp._)
                 .action(function(parameters){
-                    // 範例, 在functor裡面check被呼叫signal的參數
+                    // 範例, 在functor裡面check被呼叫signal的參數, 或是把參數存起來之類的
                     result = (parameters[0] === 123) && (parameters[1] === "aaa");
+                    expectArgs.push(parameters[0]);
+                    expectArgs.push(parameters[1]);
                 });
 
             // 模擬mock object signal跟function的呼叫
             mockObj.signal2(123, "aaa");
             compare(result, true);
+
+            compare(expectArgs[0], 123);
+            compare(expectArgs[1], "aaa");
         }
 
         // *************************************************************************
@@ -279,62 +290,92 @@ Item {
             compare(propertyChangedWork, true);
             compare(propertyChangedValue, 1234);
         }
+
+        // *************************************************************************
+        // 新增已經存在的property也ok
+        // *************************************************************************
+        function test_exist_property() {
+            compare(mockObj.visible, false);
+        }
     }
 
-    TestCase {
+    TestCaseX {
+        name: "How ignoreCallFromTest work"
         when: windowShown
-        name: "How failure look like"
-        property var mockObjFail: mockCompFail.instance()
-
         MockComponent {
-            id: mockCompFail
+            id: mockCompIgnore
 
             Signal { name: "signal1" }
-            Signal { name: "signal2"; parameterNames: ['v1', 'v2'] }
-
-            Function { name: "func1" }
-            Function { name: "func2"; parameterNumber: 2 }
-
-            Property { name: "pro1"; initialValue: "this is initial value" }
-        }
-
-        function cleanup() {
-            mockCompFail.verify();
         }
 
         // *************************************************************************
-        // 不合乎預期呼叫次數
+        // ignoreCallFromTest設成true,
+        // 所有在test file裡面呼叫mock instance的function跟signal都會被忽略掉
         // *************************************************************************
-        function test_wrong_times() {
-            mockCompFail.expectCall("signal1");
+        function test_ignoreCallFromTest() {
+            // 以下即使不呼叫expectCall也不會出現warning
+            mockCompIgnore.ignoreCallFromTest = true;
+            mockCompIgnore.instance().signal1();
 
-            mockObjFail.signal1();
-            mockObjFail.signal1();
-            /* 預期輸出
-            FAIL!  : qmltestrunner::How is unit test failure::test_wrong_times() Compared values are not the same
-               Actual   (): 2
-               Expected (): 1
-            {PATH}\tst_MockComponentDoc.qml(263) : failure location
+            /* 以下會出現warning
+            WARNING: qmltestrunner::How ignoreCallFromTest work::test_ignoreCallFromTest() Uninteresting mock call - returning undefined.
+               call: signal1()
             */
-        }
-
-        // *************************************************************************
-        // 參數不match導致不合乎預期呼叫次數
-        // *************************************************************************
-        function test_wrong_parameters_force_times_not_match() {
-            mockCompFail.expectCall("signal2", 123, "bbb");
-
-            mockObjFail.signal2(123, "aaa");
-            /* 預期輸出, 以下的意思就是signal2沒有收到預期參數是(123,"bbb")的呼叫, 反而另外接收到參數(123, aaa)的uninteresting call
-            FAIL!  : qmltestrunner::How is unit test failure::test_wrong_parameters_force_times_not_match() Compared values are not the same
-               Actual   (): 0
-               Expected (): 1
-            {PATH}\tst_MockComponentDoc.qml(279) : failure location
-            WARNING: qmltestrunner::How is unit test failure::test_wrong_parameters_force_times_not_match() Uninteresting mock call - returning undefine            d.
-               call: signal2(123, aaa)
-            {PATH}\tst_MockComponentDoc.qml(281) : failure location
-            */
+            mockCompIgnore.ignoreCallFromTest = false;
+            mockCompIgnore.instance().signal1();
         }
     }
+
+//    TestCaseX {
+//        when: windowShown
+//        name: "How failure look like"
+//        property var mockObjFail: mockCompFail.instance()
+
+//        MockComponent {
+//            id: mockCompFail
+
+//            Signal { name: "signal1" }
+//            Signal { name: "signal2"; parameterNames: ['v1', 'v2'] }
+
+//            Function { name: "func1" }
+//            Function { name: "func2"; parameterNumber: 2 }
+
+//            Property { name: "pro1"; initialValue: "this is initial value" }
+//        }
+
+//        // *************************************************************************
+//        // 不合乎預期呼叫次數
+//        // *************************************************************************
+//        function test_wrong_times() {
+//            mockCompFail.expectCall("signal1");
+
+//            mockObjFail.signal1();
+//            mockObjFail.signal1();
+//            /* 預期輸出
+//            FAIL!  : qmltestrunner::How is unit test failure::test_wrong_times() Compared values are not the same
+//               Actual   (): 2
+//               Expected (): 1
+//            {PATH}\tst_MockComponentDoc.qml(263) : failure location
+//            */
+//        }
+
+//        // *************************************************************************
+//        // 參數不match導致不合乎預期呼叫次數
+//        // *************************************************************************
+//        function test_wrong_parameters_force_times_not_match() {
+//            mockCompFail.expectCall("signal2", 123, "bbb");
+
+//            mockObjFail.signal2(123, "aaa");
+//            /* 預期輸出, 以下的意思就是signal2沒有收到預期參數是(123,"bbb")的呼叫, 反而另外接收到參數(123, aaa)的uninteresting call
+//            FAIL!  : qmltestrunner::How is unit test failure::test_wrong_parameters_force_times_not_match() Compared values are not the same
+//               Actual   (): 0
+//               Expected (): 1
+//            {PATH}\tst_MockComponentDoc.qml(279) : failure location
+//            WARNING: qmltestrunner::How is unit test failure::test_wrong_parameters_force_times_not_match() Uninteresting mock call - returning undefine            d.
+//               call: signal2(123, aaa)
+//            {PATH}\tst_MockComponentDoc.qml(281) : failure location
+//            */
+//        }
+//    }
 }
 

@@ -96,6 +96,10 @@ function ExpectedObject(name, parameters, callerInfo, dontCareParaDef) {
         return _invokeList[retIdx];
     }
 
+    this.getName = function() {
+        return _name;
+    }
+
     // ================ interface for unit test usage =================
 
     this.times = function(times) {

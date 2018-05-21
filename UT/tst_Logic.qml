@@ -100,7 +100,7 @@ Item {
         }
     }
 
-    TestCase {
+    TestCaseX {
         when: windowShown
         name: "Similar with google mock"
 
@@ -120,8 +120,9 @@ Item {
         }
 
         function cleanup() {
-            // 最後要呼叫verify, 除了跟舊方法有reset mock object的功能外, 還會執行檢查的動作
-            mockFoo.verify();
+            // 新版搭配TestCaseX可不用呼叫verify
+            //// 最後要呼叫verify, 除了跟舊方法有reset mock object的功能外, 還會執行檢查的動作
+            //mockFoo.verify();
         }
 
         function test_checkAll() {

@@ -5,7 +5,18 @@ BaseDeclaration {
     type: DeclareType.propertyType
     property var initialValue
 
+    Item {
+        id: checkExistPropertyObj
+    }
+
     function createSnippet() {
-        return "property var %1;function mock_initial_property_%1(value){ %1=value; }".arg(name);
+        if (checkExistPropertyObj.hasOwnProperty(name))
+        {
+            return "function mock_initial_property_%1(value){ %1=value; }".arg(name);
+        }
+        else
+        {
+            return "property var %1;function mock_initial_property_%1(value){ %1=value; }".arg(name);
+        }
     }
 }
